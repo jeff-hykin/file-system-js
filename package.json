@@ -1,0 +1,33 @@
+{
+    "license": "MIT",
+"main": "dist/node.min.js",
+    "module": "dist/module.js",
+    "source": "main/main.js",
+    "exports": {
+        "require": "./dist/node.min.js",
+        "import": "./dist/module.min.js"
+    },
+    "scripts": {
+        "build": "rm -rf ./dist && npx parcel build --target node --target module && npx uglifyjs-folder ./dist --each --output ./dist/",
+        "pub": "npm version patch && npm run build && npm publish && git add -A && git commit -m 'build and version bump' && git push"
+    },
+    "targets": {
+        "node": {
+            "includeNodeModules": true,
+            "distDir": "./dist",
+            "source": "main/main.js",
+            "engines": {
+                "node": "14"
+            }
+        },
+        "module": {
+            "includeNodeModules": true,
+            "distDir": "./dist",
+            "source": "main/main.js"
+        }
+    },
+    "devDependencies": {
+        "parcel": "2.0.1",
+        "uglifyjs-folder": "3.0.0"
+    }
+}
