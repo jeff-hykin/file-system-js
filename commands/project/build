@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+root="$FORNIX_FOLDER"
+if [ -z "$root" ]
+then
+    root="$PWD"
+fi
+dist_folder="$root/dist"
+
+rm -rf "$dist_folder" &>/dev/null
+npx parcel build --target node --target module "$@" \
+    && npx uglifyjs-folder "$dist_folder" --each --output "$dist_folder"
