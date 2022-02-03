@@ -7,5 +7,5 @@ fi
 dist_folder="$root/dist"
 
 rm -rf "$dist_folder" &>/dev/null
-npx parcel build --target node --target module "$@" \
+npx parcel build --target node --target deno "$@" \
     && npx uglifyjs-folder "$dist_folder" --each --output "$dist_folder"

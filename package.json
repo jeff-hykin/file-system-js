@@ -1,11 +1,11 @@
 {
   "license": "MIT",
   "main": "dist/node.min.js",
-  "module": "dist/module.js",
-  "source": "main/main.js",
+  "module": "dist/deno_exporter.js",
+  "source": "main/deno.js",
   "exports": {
     "require": "./dist/node.min.js",
-    "import": "./dist/module.min.js"
+    "import": "./dist/deno_exporter.min.js"
   },
   "scripts": {
     "build": "rm -rf ./dist && npx parcel build --target node --target module && npx uglifyjs-folder ./dist --each --output ./dist/",
@@ -15,15 +15,15 @@
     "node": {
       "includeNodeModules": true,
       "distDir": "./dist",
-      "source": "main/main.js",
+      "source": "main/node.js",
       "engines": {
         "node": "14"
       }
     },
-    "module": {
+    "deno": {
       "includeNodeModules": true,
       "distDir": "./dist",
-      "source": "main/main.js"
+      "source": "main/deno_exporter.js"
     }
   },
   "devDependencies": {
