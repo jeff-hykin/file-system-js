@@ -32,7 +32,7 @@
   },
   "name": "file-system-js",
   "description": "Everything is detailed in the `documentation/setup.md`!",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "dependencies": {
     "mime-types": "^2.1.18",
     "utility-types": "^3.10.0"
