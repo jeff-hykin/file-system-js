@@ -12,9 +12,6 @@ const ansiRegexPattern = new RegExp(
     'g'
 )
 
-ansiRegex({onlyFirst = false} = {}) {
-
-
 const Console = {
     ...vibrantConsole,
     env: new Proxy({}, {
