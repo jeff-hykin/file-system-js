@@ -1,3 +1,4 @@
+
 const Path = await import("https://deno.land/std@0.117.0/path/mod.ts")
 const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.ts")
 const { console: vibrantConsole, vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.27')).default
@@ -166,7 +167,7 @@ export const FileSystem = {
             // we do need to clear a path for the parent of this folder
             await FileSystem.clearAPathFor(parentPath)
         }
-        const { exists, isDirectory } = FileSystem.info(parentPath)
+        const { exists, isDirectory } = await FileSystem.info(parentPath)
         // if a folder is in the way, delete it
         if (exists && !isDirectory) {
             await FileSystem.remove(parentPath)
@@ -174,7 +175,7 @@ export const FileSystem = {
         const parentPathInfo = await Deno.lstat(parentPath).catch(()=>({doesntExist: true}))
         // if no folder was there, create one
         if (!parentPathInfo.exists) {
-            Deno.mkdir(Path.dirname(parentPathInfo),{ recursive: true })
+            Deno.mkdir(Path.dirname(parentPath),{ recursive: true })
         }
     },
     walkUpUntil: async (fileToFind, startPath=null)=> {
