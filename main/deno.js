@@ -1,7 +1,105 @@
 const Path = await import("https://deno.land/std@0.117.0/path/mod.ts")
 const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.ts")
+const { console: vibrantConsole, vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.27')).default
 
-export const Console = {
+delete vibrantConsole.howdy
+
+const ansiRegexPattern = new RegExp(
+    [
+        '[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)',
+        '(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))'
+    ].join('|'),
+    'g'
+)
+
+ansiRegex({onlyFirst = false} = {}) {
+
+
+const Console = {
+    ...vibrantConsole,
+    env: new Proxy({}, {
+        // Object.keys
+        ownKeys(target) {
+            return Object.keys(Deno.env.toObject())
+        },
+        has(original, key) {
+            return Deno.env.get(key) !== undefined
+        },
+        get(original, key) {
+            return Deno.env.get(key)
+        },
+        set(original, key, value) {
+            return Deno.env.set(key, value)
+        },
+        deleteProperty(original, key) {
+            return Deno.env.delete(key)
+        },
+    }),
+    tui: {
+        wordWrap({string, width, padEnd=""}) {
+            return string.split("\n").map(each=>{
+                const peices = []
+                while (true) {
+                    var [ firstPart, each ] = [ each.slice(0, width), each.slice(width) ]
+                    if (firstPart.length) {
+                        if (padEnd) {
+                            const additionalLength = firstPart.length - firstPart.replace(ansiRegexPattern, "").length
+                            firstPart = firstPart.padEnd(width+additionalLength, padEnd)
+                        }
+                        peices.push(firstPart)
+                    } else {
+                        break
+                    }
+                }
+                if (peices.length == 0) {
+                    return [" ".padEnd(width, padEnd) ]
+                } else {
+                    return peices
+                }
+            }).flat()
+        },
+    },
+    explain: {
+        error({ title, body, suggestions=[], width=90 }) {
+            const [startTitleLine, endTitleLine] = [ " |   ", "   | " ]
+            const titlePadding = startTitleLine.length + endTitleLine.length
+            const [startBodyLine, endBodyLine] = [ " |     ", "     | " ]
+            const bodyPadding = startBodyLine.length + endBodyLine.length
+            const suggestionPadding = 16
+            // TODO: give error if width too small
+            const addBarsToTitle       = (string)=>vibrance.bgBlack.redBright(`${startTitleLine}${vibrance.bgBlack.redBright.bold(string)}${endTitleLine}`)
+            const addBarsToBody        = (string)=>vibrance.bgBlack.redBright(startBodyLine).bgBlack.white(string).bgBlack.redBright(endBodyLine)
+            const addBarsToSuggestions = (string)=>vibrance.bgBlack.redBright(startBodyLine).bgBlack.white(string).bgBlack.redBright(endBodyLine)
+            const wrappedTile = Console.tui.wordWrap({ string: title, width: width - titlePadding, padEnd:" " }).map(addBarsToTitle).join("\n")
+            const wrappedBody = Console.tui.wordWrap({ string: body, width: width - bodyPadding , padEnd:" " }).map(addBarsToBody).join("\n")
+            const wrappedSuggestions = suggestions.map( // word wrap each suggestion independently (list of lists)
+                    each=>(
+                        Console.tui.wordWrap({ string: each, width: width - suggestionPadding, padEnd: " " })
+                    )
+                ).map( // put "- " on the first line and "  " on the rest for each individual suggestion
+                    ([firstLine, ...otherLines])=>(
+                        [ `- ${firstLine}`, ...otherLines.map(each=>`  ${each}`) ].map(addBarsToSuggestions).join("\n")
+                    )
+                )
+            const top             = vibrance.bgBlack.redBright( ` ${`_`.repeat(width-2)} ` )
+            const bottom          = vibrance.bgBlack.redBright( ` ${`-`.repeat(width-2)} ` )
+            const blank           = vibrance.bgBlack.redBright(` |${` `.repeat(width-4)}| `)
+            const suggestionsLine = vibrance.bgBlack.redBright(startTitleLine).bgBlack.yellow(`Suggestions:`.padEnd(width - titlePadding)).bgBlack.redBright(endTitleLine)
+            console.log(
+                [
+                    "",
+                    top,
+                    blank,
+                    wrappedTile,
+                    blank,
+                    wrappedBody,
+                    ...(wrappedSuggestions && [ blank, suggestionsLine, ...wrappedSuggestions ]),
+                    blank,
+                    bottom,
+                ].join("\n"),
+            )
+        },
+    }
     // getExecutable() {return Deno.execPath()}
 }
 
