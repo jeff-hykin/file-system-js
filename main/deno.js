@@ -24,6 +24,26 @@ export const Console = {
         line(question) {
             return prompt(question)
         },
+        confirmation(question) {
+            console.log(question)
+            prompt("[use CTRL+C to quit, or press enter to continue]")
+        },
+        yesNo(question) {
+            while (true) {
+                let answer = prompt(question)
+                const match = answer.match(/^ *(y|yes|n|no) *\n?$/i)
+                if (match) {
+                    // if yes
+                    if (match[1][0] == 'y' || match[1][0] == 'Y') {
+                        return true
+                    } else {
+                        return false
+                    }
+                } else {
+                    console.log("[ please respond with y/n, yes/no, or use CTRL+C to cancel ]")
+                }
+            }
+        },
     },
     env: new Proxy({}, {
         // Object.keys
