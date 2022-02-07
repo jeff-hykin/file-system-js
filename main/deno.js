@@ -2,6 +2,7 @@
 const Path = await import("https://deno.land/std@0.117.0/path/mod.ts")
 const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.ts")
 const { console: vibrantConsole, vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.27')).default
+const run = await import(`https://deno.land/x/sprinter@0.2.2/index.js`)
 
 delete vibrantConsole.howdy
 
@@ -13,24 +14,49 @@ const ansiRegexPattern = new RegExp(
     'g'
 )
 
-const Console = {
+export const Console = {
     ...vibrantConsole,
+    get thisExecutable() {
+        return Deno.execPath()
+    },
+    run,
+    askFor: {
+        line(question) {
+            return prompt(question)
+        },
+    },
     env: new Proxy({}, {
         // Object.keys
         ownKeys(target) {
             return Object.keys(Deno.env.toObject())
         },
         has(original, key) {
-            return Deno.env.get(key) !== undefined
+            if (typeof key === 'symbol') {
+                return false
+            } else {
+                return Deno.env.get(key) !== undefined
+            }
         },
         get(original, key) {
-            return Deno.env.get(key)
+            if (typeof key === 'symbol') {
+                return undefined
+            } else {
+                return Deno.env.get(key)
+            }
         },
         set(original, key, value) {
-            return Deno.env.set(key, value)
+            if (typeof key === 'symbol') {
+                return undefined
+            } else {
+                return Deno.env.set(key, value)
+            }
         },
         deleteProperty(original, key) {
-            return Deno.env.delete(key)
+            if (typeof key === 'symbol') {
+                return undefined
+            } else {
+                return Deno.env.delete(key)
+            }
         },
     }),
     tui: {
@@ -97,11 +123,24 @@ const Console = {
                 ].join("\n"),
             )
         },
-    }
-    // getExecutable() {return Deno.execPath()}
+    },
 }
 
+const cache = {}
 export const FileSystem = {
+    get home() {
+        if (!cache.home) {
+            // (MIT) from: https://deno.land/x/dir@v1.1.0/home_dir/mod.ts
+            switch (Deno.build.os) {
+                case "linux":
+                case "darwin":
+                    cache.home = Deno.env.get("HOME") ?? null
+                case "windows":
+                    cache.home = Deno.env.get("FOLDERID_Profile") ?? null
+            }
+        }
+        return cache.home
+    },
     getCwd() {
         return Deno.cwd()
     },
@@ -133,6 +172,7 @@ export const FileSystem = {
             return Deno.cwd()
         }
     },
+    join: Path.join,
     read: async (filePath) => {
         try {
             return await Deno.readTextFile(file)
@@ -151,7 +191,7 @@ export const FileSystem = {
         return result1
     },
     remove: (fileOrFolder) => Deno.remove(path,{recursive: true}).catch(()=>false),
-    makeAbsolute: (path)=> {
+    makeAbsolutePath: (path)=> {
         if (!Path.isAbsolute(path)) {
             return Path.normalize(Path.join(Deno.cwd(), path))
         } else {
@@ -200,8 +240,12 @@ export const FileSystem = {
         }
     },
     copy: async ({from, to, force=true}) => {
-        await FileSystem.clearAPathFor(to)
+        const existingItemDoesntExist = (await Deno.stat(from).catch(()=>({doesntExist: true}))).doesntExist
+        if (existingItemDoesntExist) {
+            throw Error(`\nTried to copy from:${from}, to:${to}\nbut "from" didn't seem to exist\n\n`)
+        }
         if (force) {
+            await FileSystem.clearAPathFor(to)
             FileSystem.remove(to)
         }
         const source = await Deno.open(from, { read: true })
@@ -213,12 +257,12 @@ export const FileSystem = {
     },
     relativeLink: async ({existingItem, newItem}) => {
         const cwd = Deno.cwd()
-        existingItem = Deno.relative(Deno.cwd(), Path.normalize(existingItem))
-        newItem = Deno.relative(Deno.cwd(), Path.normalize(newItem))
+        existingItem = Deno.relative(cwd, Path.normalize(existingItem))
+        newItem = Deno.relative(cwd, Path.normalize(newItem))
         const existingItemDoesntExist = (await Deno.stat(parentPath).catch(()=>({doesntExist: true}))).doesntExist
         // if the item doesnt exists
         if (existingItemDoesntExist) {
-            // FIXME: cause an error
+            throw Error(`\nTried to create a relativeLink between existingItem:${existingItem}, newItem:${newItem}\nbut existingItem didn't actually exist`)
         } else {
             await FileSystem.clearAPathFor(newItem)
             await FileSystem.remove(newItem)
@@ -233,7 +277,67 @@ export const FileSystem = {
         }
         return results
     },
-    recursiveFileList: async (path, options)=> {
+    pathPieces: (path)=>{
+        // const [ *folders, fileName, fileExtension ] = FileSystem.pathPieces(path)
+        const result = Path.parse(path)
+        const folderList = []
+        let dirname = result.dir
+        while (true) {
+            folderList.push(dirname)
+            // if at the top 
+            if (dirname == result.root) {
+                break
+            }
+            dirname = Path.dirname(dirname)
+        }
+        return [...folderList, result.name, result.ext ]
+    },
+    listItems: async (path)=>{
+        const paths = []
+        for await (const fileOrFolder of Deno.readDir(path)) {
+            paths.push(Path.join(path,fileOrFolder.name))
+        }
+        return paths
+    },
+    // includes symlinks to files and pipes
+    listFiles: async (path,{allSymlinksAreFiles=false})=>{
+        const paths = []
+        for await (const fileOrFolder of Deno.readDir(path)) {
+            const eachPath = Path.join(path, fileOrFolder.name)
+            // default to checking the target of a symlink
+            if (!allSymlinksAreFiles) {
+                // this one treats symbolic links as "real" paths to directories
+                if (!(await FileSystem.info(eachPath)).isDirectory) {
+                    paths.push(eachPath)
+                }
+            } else {
+                // treat all symbolic links as files
+                if (!fileOrFolder.isDirectory) {
+                    paths.push(eachPath)
+                }
+            }
+        }
+        return paths
+    },
+    listFolders: async (path, {ignoreSymlinks=false})=>{
+        const paths = []
+        for await (const fileOrFolder of Deno.readDir(path)) {
+            const eachPath = Path.join(path, fileOrFolder.name)
+            // default to checking the target of a symlink
+            if (!ignoreSymlinks) {
+                if ((await FileSystem.info(eachPath)).isDirectory) {
+                    paths.push(eachPath)
+                }
+            } else {
+                // ignores all symbolic links
+                if (fileOrFolder.isDirectory) {
+                    paths.push(eachPath)
+                }
+            }
+        }
+        return paths
+    },
+    recursivelyList: async (path, options)=> {
         if (!options.alreadySeached) {
             options.alreadySeached = new Set()
         }
@@ -241,7 +345,7 @@ export const FileSystem = {
         if (alreadySeached.has(path)) {
             return []
         }
-        const absolutePathVersion = FileSystem.makeAbsolute(path)
+        const absolutePathVersion = FileSystem.makeAbsolutePath(path)
         alreadySeached.add(absolutePathVersion)
         const results = []
         for await (const dirEntry of Deno.readDir(path)) {
@@ -249,7 +353,7 @@ export const FileSystem = {
             if (dirEntry.isFile) {
                 results.push(eachPath)
             } else if (dirEntry.isDirectory) {
-                for (const each of await FileSystem.recursiveFileList(eachPath, {...options, alreadySeached})) {
+                for (const each of await FileSystem.recursivelyList(eachPath, {...options, alreadySeached})) {
                     results.push(each)
                 }
             } else if (!options.onlyHardlinks && dirEntry.isSymlink) {
@@ -258,7 +362,7 @@ export const FileSystem = {
                 } else {
                     const pathInfo = await Deno.stat(eachPath).catch(()=>({doesntExist: true}))
                     if (pathInfo.isDirectory) {
-                        for (const each of await FileSystem.recursiveFileList(eachPath, {...options, alreadySeached})) {
+                        for (const each of await FileSystem.recursivelyList(eachPath, {...options, alreadySeached})) {
                             results.push(each)
                         }
                     } else {
@@ -273,7 +377,7 @@ export const FileSystem = {
 
 export default {
     Console,
-    FileSystem,    
+    FileSystem,
 }
 
 // const FileSystem = {
@@ -287,21 +391,21 @@ export default {
 //     makeAbsolutePath: Path.resolve,
 //     makeRelativePath: ({from, to}) => Path.relative(from, to),
 //     normalizePath: Path.normalize,
-//     pathPieces: (path)=>{
-//         // const [ *folders, fileName, fileExtension ] = FileSystem.pathPieces(path)
-//         const result = Path.parse(path)
-//         const folderList = []
-//         let dirname = result.dir
-//         while (true) {
-//             folderList.push(dirname)
-//             // if at the top 
-//             if (dirname == result.root) {
-//                 break
-//             }
-//             dirname = Path.dirname(dirname)
-//         }
-//         return [...folderList, result.name, result.ext ]
-//     },
+    // pathPieces: (path)=>{
+    //     // const [ *folders, fileName, fileExtension ] = FileSystem.pathPieces(path)
+    //     const result = Path.parse(path)
+    //     const folderList = []
+    //     let dirname = result.dir
+    //     while (true) {
+    //         folderList.push(dirname)
+    //         // if at the top 
+    //         if (dirname == result.root) {
+    //             break
+    //         }
+    //         dirname = Path.dirname(dirname)
+    //     }
+    //     return [...folderList, result.name, result.ext ]
+    // },
 //     exists: (path)=>Deno.lstat(path).then(()=>true).catch(()=>false),
 //     isFile: (path)=>Deno.lstat(path).then((value)=>value.isFile).catch(()=>false),
 //     isFolder: (path)=>Deno.lstat(path).then((value)=>value.isDirectory).catch(()=>false),
@@ -330,34 +434,34 @@ export default {
 //         }
 //     },
 //     createFile: (path)=>FileSystem.delete(path).then(()=>FileSystem.ensureParentFolder(path)).then(()=>Deno.writeTextFile(path, "")),
-//     listItems: (path)=>{
-//         const paths = []
-//         for await (const fileOrFolder of Deno.readDir(path)) {
-//             paths.push(Path.join(path,fileOrFolder.name))
-//         }
-//         return paths
-//     },
-//     // includes symlinks to files and pipes
-//     listFiles: (path)=>{
-//         const paths = []
-//         for await (const fileOrFolder of Deno.readDir(path)) {
-//             const eachPath = Path.join(path,fileOrFolder.name)
-//             if (!((await Deno.lstat(eachPath)).isDirectory)) {
-//                 paths.push(eachPath)
-//             }
-//         }
-//         return paths
-//     },
-//     listFolders: (path)=>{
-//         const paths = []
-//         for await (const fileOrFolder of Deno.readDir(path)) {
-//             const eachPath = Path.join(path,fileOrFolder.name)
-//             if (await Deno.lstat(eachPath).isDirectory) {
-//                 paths.push(eachPath)
-//             }
-//         }
-//         return paths
-//     },
+    // listItems: (path)=>{
+    //     const paths = []
+    //     for await (const fileOrFolder of Deno.readDir(path)) {
+    //         paths.push(Path.join(path,fileOrFolder.name))
+    //     }
+    //     return paths
+    // },
+    // // includes symlinks to files and pipes
+    // listFiles: (path)=>{
+    //     const paths = []
+    //     for await (const fileOrFolder of Deno.readDir(path)) {
+    //         const eachPath = Path.join(path,fileOrFolder.name)
+    //         if (!((await Deno.lstat(eachPath)).isDirectory)) {
+    //             paths.push(eachPath)
+    //         }
+    //     }
+    //     return paths
+    // },
+    // listFolders: (path)=>{
+    //     const paths = []
+    //     for await (const fileOrFolder of Deno.readDir(path)) {
+    //         const eachPath = Path.join(path,fileOrFolder.name)
+    //         if (await Deno.lstat(eachPath).isDirectory) {
+    //             paths.push(eachPath)
+    //         }
+    //     }
+    //     return paths
+    // },
 //     read: (path)=>{
 //         if (FileSystem.isFile(path)) {
 //             return Deno.readTextFile(path)
@@ -366,6 +470,7 @@ export default {
 //     targetOf: Deno.realPath,
 //     write: ({data, to})=> FileSystem.delete(to).then(()=>FileSystem.ensureParentFolder(to)).then(()=>Deno.writeTextFile(to, data)),
 //     // copy
+//          // options for how to handle symbolic links when recursively copying a folder structure that possibly has symbolic links outside of subfolders
 //     // move
 //     // rename
 //     // merge
@@ -376,11 +481,11 @@ export default {
 //     // timeOfLastAccess
 //     // timeOfLastModification
 //     // absoluteLink({from, to})
-//     // relativeLink({from, to})
 //     // home
 //     // username
 //     // tempfile
 //     // tempfolder
 //     // readBytes
+//     // readStream
 //     // append
 // }
