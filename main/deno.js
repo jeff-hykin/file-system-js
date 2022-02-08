@@ -193,9 +193,9 @@ export const FileSystem = {
         }
     },
     join: Path.join,
-    read: async (filePath) => {
+    read: async (filepath) => {
         try {
-            return await Deno.readTextFile(file)
+            return await Deno.readTextFile(filepath)
         } catch (error) {
             return null
         }
@@ -392,6 +392,48 @@ export const FileSystem = {
             }
         }
         return results
+    },
+    async getPermissions({filepath}) {
+        const {mode} = await Deno.lstat(filepath)
+        // see: https://stackoverflow.com/questions/15055634/understanding-and-decoding-the-file-mode-value-from-stat-function-output#15059931
+        return {
+            owner: {        //          rwxrwxrwx
+                canRead:    !!(0b0000000100000000 & mode),
+                canWrite:   !!(0b0000000010000000 & mode),
+                canExecute: !!(0b0000000001000000 & mode),
+            },
+            group: {
+                canRead:    !!(0b0000000000100000 & mode),
+                canWrite:   !!(0b0000000000010000 & mode),
+                canExecute: !!(0b0000000000001000 & mode),
+            },
+            others: {
+                canRead:    !!(0b0000000000000100 & mode),
+                canWrite:   !!(0b0000000000000010 & mode),
+                canExecute: !!(0b0000000000000001 & mode),
+            },
+        }
+    },
+    async setPermissions({filepath, {user={}, group={}, others={}}}) {
+        let permissionNumber = 0b000000000
+        // if not all permissions are specified, go get the existing permissions
+        if (!(Object.keys(user).length === Object.keys(group).length === Object.keys(others).length === 3)) {
+            // just grab the last 9 binary digits of the mode number. See: https://stackoverflow.com/questions/15055634/understanding-and-decoding-the-file-mode-value-from-stat-function-output#15059931
+            permissionNumber = (await DelayNode.lstat(filepath)).mode & 0b0000000111111111
+        }
+        // 
+        // set bits for the corrisponding permissions
+        // 
+        if (user.canRead     ) { permissionNumber = permissionNumber & 0b1000000000 }
+        if (user.canWrite    ) { permissionNumber = permissionNumber & 0b0100000000 }
+        if (user.canExecute  ) { permissionNumber = permissionNumber & 0b0001000000 }
+        if (group.canRead    ) { permissionNumber = permissionNumber & 0b0000100000 }
+        if (group.canWrite   ) { permissionNumber = permissionNumber & 0b0000010000 }
+        if (group.canExecute ) { permissionNumber = permissionNumber & 0b0000001000 }
+        if (others.canRead   ) { permissionNumber = permissionNumber & 0b0000000100 }
+        if (others.canWrite  ) { permissionNumber = permissionNumber & 0b0000000010 }
+        if (others.canExecute) { permissionNumber = permissionNumber & 0b0000000001 }
+        return Deno.chmod(filepath, permissionNumber)
     },
 }
 
