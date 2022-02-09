@@ -424,15 +424,15 @@ export const FileSystem = {
         // 
         // set bits for the corrisponding permissions
         // 
-        if (user.canRead     ) { permissionNumber = permissionNumber & 0b1000000000 }
-        if (user.canWrite    ) { permissionNumber = permissionNumber & 0b0100000000 }
-        if (user.canExecute  ) { permissionNumber = permissionNumber & 0b0001000000 }
-        if (group.canRead    ) { permissionNumber = permissionNumber & 0b0000100000 }
-        if (group.canWrite   ) { permissionNumber = permissionNumber & 0b0000010000 }
-        if (group.canExecute ) { permissionNumber = permissionNumber & 0b0000001000 }
-        if (others.canRead   ) { permissionNumber = permissionNumber & 0b0000000100 }
-        if (others.canWrite  ) { permissionNumber = permissionNumber & 0b0000000010 }
-        if (others.canExecute) { permissionNumber = permissionNumber & 0b0000000001 }
+        if (user.canRead     ) { permissionNumber = permissionNumber | 0b1000000000 }
+        if (user.canWrite    ) { permissionNumber = permissionNumber | 0b0100000000 }
+        if (user.canExecute  ) { permissionNumber = permissionNumber | 0b0001000000 }
+        if (group.canRead    ) { permissionNumber = permissionNumber | 0b0000100000 }
+        if (group.canWrite   ) { permissionNumber = permissionNumber | 0b0000010000 }
+        if (group.canExecute ) { permissionNumber = permissionNumber | 0b0000001000 }
+        if (others.canRead   ) { permissionNumber = permissionNumber | 0b0000000100 }
+        if (others.canWrite  ) { permissionNumber = permissionNumber | 0b0000000010 }
+        if (others.canExecute) { permissionNumber = permissionNumber | 0b0000000001 }
         return Deno.chmod(filepath, permissionNumber)
     },
 }
