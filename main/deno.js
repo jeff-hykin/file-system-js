@@ -455,7 +455,7 @@ export const FileSystem = {
             },
         }
     },
-    async setPermissions({filepath, permisions={user:{}, group:{}, others:{}}, recursively=false}) {
+    async addPermissions({filepath, permisions={user:{}, group:{}, others:{}}, recursively=false}) {
         // just ensure the names exist
         permisions = { owner:{}, group:{}, others:{}, ...permisions }
         let permissionNumber = 0b000000000
