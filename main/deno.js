@@ -276,10 +276,7 @@ export const FileSystem = {
         return result
     },
     relativeLink: async ({existingItem, newItem}) => {
-        const cwd = Deno.cwd()
-        existingItem = Deno.relative(cwd, Path.normalize(existingItem))
-        newItem = Deno.relative(cwd, Path.normalize(newItem))
-        const existingItemDoesntExist = (await Deno.stat(parentPath).catch(()=>({doesntExist: true}))).doesntExist
+        const existingItemDoesntExist = (await Deno.lstat(existingItem).catch(()=>({doesntExist: true}))).doesntExist
         // if the item doesnt exists
         if (existingItemDoesntExist) {
             throw Error(`\nTried to create a relativeLink between existingItem:${existingItem}, newItem:${newItem}\nbut existingItem didn't actually exist`)
@@ -287,7 +284,8 @@ export const FileSystem = {
             await FileSystem.clearAPathFor(newItem)
             await FileSystem.remove(newItem)
         }
-        return Deno.symlink(existingItem, newItem)
+        const pathFromNewToExisting = Path.relative(newItem, existingItem)
+        return Deno.symlink(pathFromNewToExisting, existingItem)
     },
     listPaths: async (path, options)=> {
         const results = []
