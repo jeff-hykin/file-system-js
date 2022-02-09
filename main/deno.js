@@ -468,7 +468,7 @@ export const FileSystem = {
         let fileInfo
         // if not all permissions are specified, go get the existing permissions
         if (!(Object.keys(permissions.owner).length === Object.keys(permissions.group).length === Object.keys(permissions.others).length === 3)) {
-            fileInfo = await Deno.stat(filepath)
+            fileInfo = await FileSystem.info(filepath)
             // just grab the last 9 binary digits of the mode number. See: https://stackoverflow.com/questions/15055634/understanding-and-decoding-the-file-mode-value-from-stat-function-output#15059931
             permissionNumber = fileInfo.mode & 0b0000000111111111
         }
@@ -491,7 +491,7 @@ export const FileSystem = {
         if (
             recursively == false
             || (fileInfo instanceof Object && fileInfo.isFile) // if already computed, dont make a 2nd system call
-            || (!(fileInfo instanceof Object) && (await Deno.stat(filepath)).isFile)
+            || (!(fileInfo instanceof Object) && (await FileSystem.info(filepath)).isFile)
         ) {
             return Deno.chmod(filepath, permissionNumber)
         } else {
