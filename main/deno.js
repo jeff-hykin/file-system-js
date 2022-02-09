@@ -243,6 +243,30 @@ export const FileSystem = {
             return path
         }
     },
+    async finalTargetOf(filepath) {
+        let result = await Deno.lstat(filepath).catch(()=>({doesntExist: true}))
+        if (result.doesntExist) {
+            return null
+        }
+        const pathChain = [ FileSystem.makeAbsolutePath(filepath) ]
+        while (result.isSymlink) {
+            // get the path to the target
+            filepath = Path.relative(filepath, await Deno.readLink(filepath))
+            result = await Deno.lstat(filepath).catch(()=>({doesntExist: true}))
+            // check if target exists
+            if (result.doesntExist) {
+                return null
+            }
+            // check for infinite loops
+            const absoluteFilePath = FileSystem.makeAbsolutePath(filepath)
+            if (pathChain.includes(absoluteFilePath)) {
+                // circular loop of links
+                return null
+            }
+            pathChain.push(FileSystem.makeAbsolutePath(filepath))
+        }
+        return filepath
+    },
     clearAPathFor: async (path)=>{
         const parentPath = Path.dirname(path)
         // dont need to clear a path for the root folder
@@ -403,7 +427,7 @@ export const FileSystem = {
                 if (options.dontFollowSymlinks) {
                     results.push(eachPath)
                 } else {
-                    const pathInfo = await Deno.stat(eachPath).catch(()=>({doesntExist: true}))
+                    const pathInfo = await FileSystem.info(eachPath)
                     if (pathInfo.isDirectory) {
                         for (const each of await FileSystem.recursivelyList(eachPath, {...options, alreadySeached})) {
                             results.push(each)
