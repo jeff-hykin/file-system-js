@@ -193,9 +193,9 @@ export const FileSystem = {
         }
     },
     join: Path.join,
-    async read(filepath) {
+    async read(path) {
         try {
-            return await Deno.readTextFile(filepath)
+            return await Deno.readTextFile(path)
         } catch (error) {
             return null
         }
@@ -237,29 +237,29 @@ export const FileSystem = {
             return path
         }
     },
-    async finalTargetOf(filepath) {
-        let result = await Deno.lstat(filepath).catch(()=>({doesntExist: true}))
+    async finalTargetOf(path) {
+        let result = await Deno.lstat(path).catch(()=>({doesntExist: true}))
         if (result.doesntExist) {
             return null
         }
-        const pathChain = [ FileSystem.makeAbsolutePath(filepath) ]
+        const pathChain = [ FileSystem.makeAbsolutePath(path) ]
         while (result.isSymlink) {
             // get the path to the target
-            filepath = Path.relative(filepath, await Deno.readLink(filepath))
-            result = await Deno.lstat(filepath).catch(()=>({doesntExist: true}))
+            path = Path.relative(path, await Deno.readLink(path))
+            result = await Deno.lstat(path).catch(()=>({doesntExist: true}))
             // check if target exists
             if (result.doesntExist) {
                 return null
             }
             // check for infinite loops
-            const absoluteFilePath = FileSystem.makeAbsolutePath(filepath)
-            if (pathChain.includes(absoluteFilePath)) {
+            const absolutePath = FileSystem.makeAbsolutePath(path)
+            if (pathChain.includes(absolutePath)) {
                 // circular loop of links
                 return null
             }
-            pathChain.push(FileSystem.makeAbsolutePath(filepath))
+            pathChain.push(FileSystem.makeAbsolutePath(path))
         }
-        return filepath
+        return path
     },
     async clearAPathFor(path) {
         const parentPath = Path.dirname(path)
@@ -434,8 +434,8 @@ export const FileSystem = {
         }
         return results
     },
-    async getPermissions({filepath}) {
-        const {mode} = await Deno.lstat(filepath)
+    async getPermissions({path}) {
+        const {mode} = await Deno.lstat(path)
         // see: https://stackoverflow.com/questions/15055634/understanding-and-decoding-the-file-mode-value-from-stat-function-output#15059931
         return {
             owner: {        //          rwxrwxrwx
@@ -458,7 +458,7 @@ export const FileSystem = {
     /**
      * Add/set file permissions
      *
-     * @param {String} args.filepath - 
+     * @param {String} args.path - 
      * @param {Object|Boolean} args.recursively - 
      * @param {Object} args.permissions - 
      * @param {Object} args.permissions.owner - 
@@ -477,7 +477,7 @@ export const FileSystem = {
      *
      * @example
      *  await FileSystem.addPermissions({
-     *      filepath: fileOrFolderPath,
+     *      path: fileOrFolderPath,
      *      permissions: {
      *          owner: {
      *              canExecute: true,
@@ -485,14 +485,14 @@ export const FileSystem = {
      *      }
      *  })
      */
-    async addPermissions({filepath, permisions={owner:{}, group:{}, others:{}}, recursively=false}) {
+    async addPermissions({path, permisions={owner:{}, group:{}, others:{}}, recursively=false}) {
         // just ensure the names exist
         permisions = { owner:{}, group:{}, others:{}, ...permisions }
         let permissionNumber = 0b000000000
         let fileInfo
         // if not all permissions are specified, go get the existing permissions
         if (!(Object.keys(permissions.owner).length === Object.keys(permissions.group).length === Object.keys(permissions.others).length === 3)) {
-            fileInfo = await FileSystem.info(filepath)
+            fileInfo = await FileSystem.info(path)
             // just grab the last 9 binary digits of the mode number. See: https://stackoverflow.com/questions/15055634/understanding-and-decoding-the-file-mode-value-from-stat-function-output#15059931
             permissionNumber = fileInfo.mode & 0b0000000111111111
         }
@@ -515,12 +515,12 @@ export const FileSystem = {
         if (
             recursively == false
             || (fileInfo instanceof Object && fileInfo.isFile) // if already computed, dont make a 2nd system call
-            || (!(fileInfo instanceof Object) && (await FileSystem.info(filepath)).isFile)
+            || (!(fileInfo instanceof Object) && (await FileSystem.info(path)).isFile)
         ) {
-            return Deno.chmod(filepath, permissionNumber)
+            return Deno.chmod(path, permissionNumber)
         } else {
             const promises = []
-            const paths = await FileSystem.recursivelyList(filepath, {onlyHardlinks: false, dontFollowSymlinks: false, ...recursively})
+            const paths = await FileSystem.recursivelyList(path, {onlyHardlinks: false, dontFollowSymlinks: false, ...recursively})
             // schedule all of them asyncly
             for (const eachPath of paths) {
                 promises.push(
