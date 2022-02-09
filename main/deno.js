@@ -201,12 +201,6 @@ export const FileSystem = {
         }
     },
     info: async (fileOrFolderPath) => {
-        const result = {
-            exists: true,
-            doesntExist: false,
-            isBrokenLink: false,
-            isLoopOfLinks: false,
-        }
         const result = await Deno.lstat(fileOrFolderPath).catch(()=>({doesntExist: true}))
         // add additional keys
         Object.assign(result, {
@@ -223,10 +217,10 @@ export const FileSystem = {
             } catch (error) {
                 result.isFile = true
                 if (error.message.match(/^Too many levels of symbolic links/)) {
-                    result2.isBrokenLink = true
-                    result2.isLoopOfLinks = true
+                    result.isBrokenLink = true
+                    result.isLoopOfLinks = true
                 } else if (error.message.match(/^No such file or directory/)) {
-                    result2.isBrokenLink = true
+                    result.isBrokenLink = true
                 } else {
                     // probably a permission error
                     throw error
@@ -295,7 +289,7 @@ export const FileSystem = {
         }
         while (1) {
             let checkPath = Path.join(here, fileToFind)
-            const pathInfo = await Deno.stat(checkPath).catch(()=>({doesntExist: true}))
+            const pathInfo = await Deno.lstat(checkPath).catch(()=>({doesntExist: true}))
             if (!pathInfo.doesntExist) {
                 return checkPath
             }
@@ -566,9 +560,9 @@ export default {
 //         if (!result1.doesntExist && !result1.isDirectory) {
 //             await FileSystem.delete(parentPath)
 //         }
-//         const result2 = await Deno.lstat(parentPath).catch(()=>({doesntExist: true}))
+//         const result = await Deno.lstat(parentPath).catch(()=>({doesntExist: true}))
 //         // if no folder was there, create one
-//         if (result2.doesntExist) {
+//         if (result.doesntExist) {
 //             Deno.mkdir(Path.dirname(parentPath),{ recursive: true })
 //         }
 //     },
