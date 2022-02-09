@@ -485,9 +485,9 @@ export const FileSystem = {
      *      }
      *  })
      */
-    async addPermissions({path, permisions={owner:{}, group:{}, others:{}}, recursively=false}) {
+    async addPermissions({path, permissions={owner:{}, group:{}, others:{}}, recursively=false}) {
         // just ensure the names exist
-        permisions = { owner:{}, group:{}, others:{}, ...permisions }
+        permissions = { owner:{}, group:{}, others:{}, ...permissions }
         let permissionNumber = 0b000000000
         let fileInfo
         // if not all permissions are specified, go get the existing permissions
@@ -499,15 +499,15 @@ export const FileSystem = {
         // 
         // set bits for the corrisponding permissions
         // 
-        if (permisions.owner.canRead    ) { permissionNumber = permissionNumber | 0b1000000000 }
-        if (permisions.owner.canWrite   ) { permissionNumber = permissionNumber | 0b0100000000 }
-        if (permisions.owner.canExecute ) { permissionNumber = permissionNumber | 0b0001000000 }
-        if (permisions.group.canRead    ) { permissionNumber = permissionNumber | 0b0000100000 }
-        if (permisions.group.canWrite   ) { permissionNumber = permissionNumber | 0b0000010000 }
-        if (permisions.group.canExecute ) { permissionNumber = permissionNumber | 0b0000001000 }
-        if (permisions.others.canRead   ) { permissionNumber = permissionNumber | 0b0000000100 }
-        if (permisions.others.canWrite  ) { permissionNumber = permissionNumber | 0b0000000010 }
-        if (permisions.others.canExecute) { permissionNumber = permissionNumber | 0b0000000001 }
+        if (permissions.owner.canRead    ) { permissionNumber = permissionNumber | 0b1000000000 }
+        if (permissions.owner.canWrite   ) { permissionNumber = permissionNumber | 0b0100000000 }
+        if (permissions.owner.canExecute ) { permissionNumber = permissionNumber | 0b0001000000 }
+        if (permissions.group.canRead    ) { permissionNumber = permissionNumber | 0b0000100000 }
+        if (permissions.group.canWrite   ) { permissionNumber = permissionNumber | 0b0000010000 }
+        if (permissions.group.canExecute ) { permissionNumber = permissionNumber | 0b0000001000 }
+        if (permissions.others.canRead   ) { permissionNumber = permissionNumber | 0b0000000100 }
+        if (permissions.others.canWrite  ) { permissionNumber = permissionNumber | 0b0000000010 }
+        if (permissions.others.canExecute) { permissionNumber = permissionNumber | 0b0000000001 }
         
         // 
         // actually set the permissions
