@@ -402,6 +402,7 @@ export const FileSystem = {
         if (!options.alreadySeached) {
             options.alreadySeached = new Set()
         }
+        const alreadySeached = options.alreadySeached
         // avoid infinite loops
         if (alreadySeached.has(path)) {
             return []
