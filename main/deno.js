@@ -193,14 +193,14 @@ export const FileSystem = {
         }
     },
     join: Path.join,
-    read: async (filepath) => {
+    async read(filepath) {
         try {
             return await Deno.readTextFile(filepath)
         } catch (error) {
             return null
         }
     },
-    info: async (fileOrFolderPath) => {
+    async info(fileOrFolderPath) {
         const result = await Deno.lstat(fileOrFolderPath).catch(()=>({doesntExist: true}))
         // add additional keys
         Object.assign(result, {
@@ -261,7 +261,7 @@ export const FileSystem = {
         }
         return filepath
     },
-    clearAPathFor: async (path)=>{
+    async clearAPathFor(path) {
         const parentPath = Path.dirname(path)
         // dont need to clear a path for the root folder
         if (parentPath == path) {
@@ -281,7 +281,7 @@ export const FileSystem = {
             Deno.mkdir(Path.dirname(parentPath),{ recursive: true })
         }
     },
-    walkUpUntil: async (fileToFind, startPath=null)=> {
+    async walkUpUntil(fileToFind, startPath=null){
         const cwd = Deno.cwd()
         let here = startPath || cwd
         if (!Path.isAbsolute(here)) {
@@ -302,7 +302,7 @@ export const FileSystem = {
             }
         }
     },
-    copy: async ({from, to, force=true}) => {
+    async copy({from, to, force=true}) {
         const existingItemDoesntExist = (await Deno.stat(from).catch(()=>({doesntExist: true}))).doesntExist
         if (existingItemDoesntExist) {
             throw Error(`\nTried to copy from:${from}, to:${to}\nbut "from" didn't seem to exist\n\n`)
@@ -318,7 +318,7 @@ export const FileSystem = {
         Deno.close(target.rid)
         return result
     },
-    relativeLink: async ({existingItem, newItem}) => {
+    async relativeLink({existingItem, newItem}) {
         const existingItemDoesntExist = (await Deno.lstat(existingItem).catch(()=>({doesntExist: true}))).doesntExist
         // if the item doesnt exists
         if (existingItemDoesntExist) {
@@ -330,7 +330,7 @@ export const FileSystem = {
         const pathFromNewToExisting = Path.relative(newItem, existingItem)
         return Deno.symlink(pathFromNewToExisting, existingItem)
     },
-    listPaths: async (path, options)=> {
+    async listPaths(path, options){
         const results = []
         for await (const dirEntry of Deno.readDir(path)) {
             const eachPath = Path.join(path, dirEntry.name)
@@ -353,7 +353,7 @@ export const FileSystem = {
         }
         return [...folderList, result.name, result.ext ]
     },
-    listItems: async (path)=>{
+    async listItems(path) {
         const paths = []
         for await (const fileOrFolder of Deno.readDir(path)) {
             paths.push(Path.join(path,fileOrFolder.name))
@@ -361,7 +361,7 @@ export const FileSystem = {
         return paths
     },
     // includes symlinks to files and pipes
-    listFiles: async (path,{allSymlinksAreFiles=false})=>{
+    async listFiles(path,{allSymlinksAreFiles=false}) {
         const paths = []
         for await (const fileOrFolder of Deno.readDir(path)) {
             const eachPath = Path.join(path, fileOrFolder.name)
@@ -380,7 +380,7 @@ export const FileSystem = {
         }
         return paths
     },
-    listFolders: async (path, {ignoreSymlinks=false})=>{
+    async listFolders(path, {ignoreSymlinks=false}) {
         const paths = []
         for await (const fileOrFolder of Deno.readDir(path)) {
             const eachPath = Path.join(path, fileOrFolder.name)
@@ -398,7 +398,7 @@ export const FileSystem = {
         }
         return paths
     },
-    recursivelyList: async (path, options={onlyHardlinks: false, dontFollowSymlinks: false})=> {
+    async recursivelyList(path, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
         if (!options.alreadySeached) {
             options.alreadySeached = new Set()
         }
@@ -455,7 +455,37 @@ export const FileSystem = {
             },
         }
     },
-    async addPermissions({filepath, permisions={user:{}, group:{}, others:{}}, recursively=false}) {
+    /**
+     * Add/set file permissions
+     *
+     * @param {String} args.filepath - 
+     * @param {Object|Boolean} args.recursively - 
+     * @param {Object} args.permissions - 
+     * @param {Object} args.permissions.owner - 
+     * @param {Boolean} args.permissions.owner.canRead - 
+     * @param {Boolean} args.permissions.owner.canWrite - 
+     * @param {Boolean} args.permissions.owner.canExecute - 
+     * @param {Object} args.permissions.group - 
+     * @param {Boolean} args.permissions.group.canRead - 
+     * @param {Boolean} args.permissions.group.canWrite - 
+     * @param {Boolean} args.permissions.group.canExecute - 
+     * @param {Object} args.permissions.others - 
+     * @param {Boolean} args.permissions.others.canRead - 
+     * @param {Boolean} args.permissions.others.canWrite - 
+     * @param {Boolean} args.permissions.others.canExecute - 
+     * @return {null} 
+     *
+     * @example
+     *  await FileSystem.addPermissions({
+     *      filepath: fileOrFolderPath,
+     *      permissions: {
+     *          owner: {
+     *              canExecute: true,
+     *          },
+     *      }
+     *  })
+     */
+    async addPermissions({filepath, permisions={owner:{}, group:{}, others:{}}, recursively=false}) {
         // just ensure the names exist
         permisions = { owner:{}, group:{}, others:{}, ...permisions }
         let permissionNumber = 0b000000000
@@ -615,7 +645,7 @@ export default {
 //     // timeOfLastModification
 //     // absoluteLink({from, to})
 //     // home
-//     // username
+//     // ownername
 //     // tempfile
 //     // tempfolder
 //     // readBytes
