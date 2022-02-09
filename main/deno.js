@@ -200,15 +200,40 @@ export const FileSystem = {
             return null
         }
     },
-    info: async (fileOrFolder) => {
-        const result1 = await Deno.lstat(fileOrFolder).catch(()=>({doesntExist: true}))
-        result1.exists = !result1.doesntExist
-        if (result1.exists) {
-            const result2 = await Deno.stat(fileOrFolder).catch(()=>({doesntExist: true}))
-            result1.isFile = result2.isFile
-            result1.isDirectory = result2.isDirectory
+    info: async (fileOrFolderPath) => {
+        const result = {
+            exists: true,
+            doesntExist: false,
+            isBrokenLink: false,
+            isLoopOfLinks: false,
         }
-        return result1
+        const result = await Deno.lstat(fileOrFolderPath).catch(()=>({doesntExist: true}))
+        // add additional keys
+        Object.assign(result, {
+            exists: !result.doesntExist,
+            isBrokenLink: false,
+            isLoopOfLinks: false,
+        })
+        // follow symlinks to see what they link to
+        if (result.exists && result.isSymlink) {
+            try {
+                const { isDirectory, isFile } = await Deno.stat(fileOrFolderPath)
+                result.isDirectory = isDirectory
+                result.isFile = isFile
+            } catch (error) {
+                result.isFile = true
+                if (error.message.match(/^Too many levels of symbolic links/)) {
+                    result2.isBrokenLink = true
+                    result2.isLoopOfLinks = true
+                } else if (error.message.match(/^No such file or directory/)) {
+                    result2.isBrokenLink = true
+                } else {
+                    // probably a permission error
+                    throw error
+                }
+            }
+        }
+        return result
     },
     remove: (fileOrFolder) => Deno.remove(path,{recursive: true}).catch(()=>false),
     makeAbsolutePath: (path)=> {
@@ -355,7 +380,7 @@ export const FileSystem = {
         }
         return paths
     },
-    recursivelyList: async (path, options)=> {
+    recursivelyList: async (path, options={onlyHardlinks: false, dontFollowSymlinks: false})=> {
         if (!options.alreadySeached) {
             options.alreadySeached = new Set()
         }
@@ -412,26 +437,56 @@ export const FileSystem = {
             },
         }
     },
-    async setPermissions({filepath, {user={}, group={}, others={}}}) {
+    async setPermissions({filepath, permisions={user:{}, group:{}, others:{}}, recursively=false}) {
+        // just ensure the names exist
+        permisions = { owner:{}, group:{}, others:{}, ...permisions }
         let permissionNumber = 0b000000000
+        let fileInfo
         // if not all permissions are specified, go get the existing permissions
-        if (!(Object.keys(user).length === Object.keys(group).length === Object.keys(others).length === 3)) {
+        if (!(Object.keys(permissions.owner).length === Object.keys(permissions.group).length === Object.keys(permissions.others).length === 3)) {
+            fileInfo = await Deno.stat(filepath)
             // just grab the last 9 binary digits of the mode number. See: https://stackoverflow.com/questions/15055634/understanding-and-decoding-the-file-mode-value-from-stat-function-output#15059931
-            permissionNumber = (await DelayNode.lstat(filepath)).mode & 0b0000000111111111
+            permissionNumber = fileInfo.mode & 0b0000000111111111
         }
         // 
         // set bits for the corrisponding permissions
         // 
-        if (user.canRead     ) { permissionNumber = permissionNumber | 0b1000000000 }
-        if (user.canWrite    ) { permissionNumber = permissionNumber | 0b0100000000 }
-        if (user.canExecute  ) { permissionNumber = permissionNumber | 0b0001000000 }
-        if (group.canRead    ) { permissionNumber = permissionNumber | 0b0000100000 }
-        if (group.canWrite   ) { permissionNumber = permissionNumber | 0b0000010000 }
-        if (group.canExecute ) { permissionNumber = permissionNumber | 0b0000001000 }
-        if (others.canRead   ) { permissionNumber = permissionNumber | 0b0000000100 }
-        if (others.canWrite  ) { permissionNumber = permissionNumber | 0b0000000010 }
-        if (others.canExecute) { permissionNumber = permissionNumber | 0b0000000001 }
-        return Deno.chmod(filepath, permissionNumber)
+        if (permisions.owner.canRead    ) { permissionNumber = permissionNumber | 0b1000000000 }
+        if (permisions.owner.canWrite   ) { permissionNumber = permissionNumber | 0b0100000000 }
+        if (permisions.owner.canExecute ) { permissionNumber = permissionNumber | 0b0001000000 }
+        if (permisions.group.canRead    ) { permissionNumber = permissionNumber | 0b0000100000 }
+        if (permisions.group.canWrite   ) { permissionNumber = permissionNumber | 0b0000010000 }
+        if (permisions.group.canExecute ) { permissionNumber = permissionNumber | 0b0000001000 }
+        if (permisions.others.canRead   ) { permissionNumber = permissionNumber | 0b0000000100 }
+        if (permisions.others.canWrite  ) { permissionNumber = permissionNumber | 0b0000000010 }
+        if (permisions.others.canExecute) { permissionNumber = permissionNumber | 0b0000000001 }
+        
+        // 
+        // actually set the permissions
+        // 
+        if (
+            recursively == false
+            || (fileInfo instanceof Object && fileInfo.isFile) // if already computed, dont make a 2nd system call
+            || (!(fileInfo instanceof Object) && (await Deno.stat(filepath)).isFile)
+        ) {
+            return Deno.chmod(filepath, permissionNumber)
+        } else {
+            const promises = []
+            const paths = await FileSystem.recursivelyList(filepath, {onlyHardlinks: false, dontFollowSymlinks: false, ...recursively})
+            // schedule all of them asyncly
+            for (const eachPath of paths) {
+                promises.push(
+                    Deno.chmod(eachPath, permissionNumber).catch(console.error)
+                )
+            }
+            // create a promise to then wait on all of them
+            return new Promise(async (resolve, reject)=>{
+                for (const each of promises) {
+                    await each
+                }
+                resolve()
+            })
+        }
     },
 }
 
