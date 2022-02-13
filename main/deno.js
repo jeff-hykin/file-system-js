@@ -227,6 +227,7 @@ export const FileSystem = {
                 }
             }
         }
+        result.isFolder = result.isDirectory
         return result
     },
     remove: (fileOrFolder) => Deno.remove(path,{recursive: true}).catch(()=>false),
@@ -261,25 +262,30 @@ export const FileSystem = {
         }
         return path
     },
-    async clearAPathFor(path) {
+    async ensureIsFolder(path) {
         const parentPath = Path.dirname(path)
-        // dont need to clear a path for the root folder
+        // root is always a folder
         if (parentPath == path) {
             return
-        } else {
-            // we do need to clear a path for the parent of this folder
-            await FileSystem.clearAPathFor(parentPath)
+        } 
+        // make sure parent is a folder
+        const parent = await FileSystem.info(parentPath)
+        if (!parent.isDirectory) {
+            await FileSystem.ensureIsFolder(parentPath)
         }
-        const { exists, isDirectory } = await FileSystem.info(parentPath)
-        // if a folder is in the way, delete it
-        if (exists && !isDirectory) {
-            await FileSystem.remove(parentPath)
+        
+        // delete files in the way
+        const thisPath = await FileSystem.info(path)
+        if (thisPath.exists && !thisPath.isDirectory) {
+            await FileSystem.remove(thisPath)
         }
-        const parentPathInfo = await Deno.lstat(parentPath).catch(()=>({doesntExist: true}))
-        // if no folder was there, create one
-        if (!parentPathInfo.exists) {
-            Deno.mkdir(Path.dirname(parentPath),{ recursive: true })
-        }
+        
+        // finally create the folder
+        return Deno.mkdir(thisPath, { recursive: true })
+    },
+    async clearAPathFor(path) {
+        const parentPath = Path.dirname(path)
+        return ensureIsFolder(parentPath)
     },
     async walkUpUntil(fileToFind, startPath=null){
         const cwd = Deno.cwd()
@@ -535,6 +541,22 @@ export const FileSystem = {
                 }
                 resolve()
             })
+        }
+    },
+    async write({path, data, force=true}) {
+        if (force) {
+            await FileSystem.clearAPathFor(path)
+            const info = FileSystem.info(path)
+            if (info.isDirectory) {
+                FileSystem.remove(path)
+            }
+        }
+        // string
+        if (typeof data == 'string') {
+            return Deno.writeTextFile(path, data)
+        // assuming bytes (maybe in the future, readables and pipes will be supported)
+        } else {
+           return Deno.writeFile(path, data)
         }
     },
 }
