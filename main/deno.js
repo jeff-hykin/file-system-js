@@ -560,6 +560,27 @@ export const FileSystem = {
            return Deno.writeFile(path, data)
         }
     },
+    async append({path, data, force=true}) {
+        if (force) {
+            await FileSystem.clearAPathFor(path)
+            const info = FileSystem.info(path)
+            if (info.isDirectory) {
+                FileSystem.remove(path)
+            }
+        }
+        const file = await Deno.open(path, {write: true, read:true, create: true})
+        // go to the end of a file (meaning everthing will be appended)
+        await Deno.seek(file.rid, 0, Deno.SeekMode.End)
+        // string
+        if (typeof data == 'string') {
+            await Deno.write(file.rid, new TextEncoder().encode(data))
+        // assuming bytes (maybe in the future, readables and pipes will be supported)
+        } else {
+            await Deno.write(file.rid, data)
+        }
+        // TODO: consider the possibility of this same file already being open somewhere else in the program, address/test how that might lead to problems
+        await file.close()
+    },
 }
 
 export default {
