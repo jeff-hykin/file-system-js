@@ -1,7 +1,7 @@
 
 const Path = await import("https://deno.land/std@0.117.0/path/mod.ts")
 const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.ts")
-const { console: vibrantConsole, vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.27')).default
+const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.33')).default
 const run = await import(`https://deno.land/x/sprinter@0.2.2/index.js`)
 
 delete vibrantConsole.howdy
@@ -15,7 +15,8 @@ const ansiRegexPattern = new RegExp(
 )
 
 export const Console = {
-    ...vibrantConsole,
+    ...console,
+    ...vibrance,
     get thisExecutable() {
         return Deno.execPath()
     },
