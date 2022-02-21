@@ -4,6 +4,18 @@ const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.
 const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.33')).default
 const run = await import(`https://deno.land/x/sprinter@0.2.2/index.js`)
 
+
+// TODO:
+    // add dirname getter to .info()
+    // add basename getter to .info()
+    // export an OS object
+    // grab stuff from fs module: import { expandGlob } from "https://deno.land/std@0.126.0/fs/mod.ts";
+        // LF vs CRLF detection
+    // add move command
+// BIG:
+    // add copy command (figure out how to handle symlinks)
+
+
 delete vibrantConsole.howdy
 
 const ansiRegexPattern = new RegExp(
