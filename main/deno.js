@@ -291,7 +291,7 @@ export const FileSystem = {
         }
         
         // finally create the folder
-        return Deno.mkdir(thisPath, { recursive: true })
+        return Deno.mkdir(path, { recursive: true })
     },
     async clearAPathFor(path) {
         const parentPath = Path.dirname(path)
