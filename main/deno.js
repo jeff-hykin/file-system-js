@@ -295,7 +295,7 @@ export const FileSystem = {
     },
     async clearAPathFor(path) {
         const parentPath = Path.dirname(path)
-        return ensureIsFolder(parentPath)
+        return FileSystem.ensureIsFolder(parentPath)
     },
     async walkUpUntil(fileToFind, startPath=null){
         const cwd = Deno.cwd()
