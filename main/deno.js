@@ -160,13 +160,13 @@ const cache = {}
 export const FileSystem = {
     get home() {
         if (!cache.home) {
-            // (MIT) from: https://deno.land/x/dir@v1.1.0/home_dir/mod.ts
-            switch (Deno.build.os) {
-                case "linux":
-                case "darwin":
-                    cache.home = Deno.env.get("HOME") ?? null
-                case "windows":
-                    cache.home = Deno.env.get("FOLDERID_Profile") ?? null
+            if (Deno.build.os == "linux" || Deno.build.os == "darwin") {
+                cache.home = Deno.env.get("HOME")
+            } else if (Deno.build.os == "windows") {
+                // untested
+                cache.home = Deno.env.get("HOMEPATH")
+            } else {
+                return null
             }
         }
         return cache.home
