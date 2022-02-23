@@ -240,7 +240,7 @@ export const FileSystem = {
         result.isFolder = result.isDirectory
         return result
     },
-    remove: (fileOrFolder) => Deno.remove(path,{recursive: true}).catch(()=>false),
+    remove: (fileOrFolder) => Deno.remove(fileOrFolder,{recursive: true}).catch(()=>false),
     makeAbsolutePath: (path)=> {
         if (!Path.isAbsolute(path)) {
             return Path.normalize(Path.join(Deno.cwd(), path))
