@@ -377,7 +377,8 @@ export const FileSystem = {
         return paths
     },
     // includes symlinks to files and pipes
-    async listFiles(path,{allSymlinksAreFiles=false}) {
+    async listFiles(path, options={allSymlinksAreFiles:false}) {
+        options = {allSymlinksAreFiles:false, ...options} 
         const paths = []
         for await (const fileOrFolder of Deno.readDir(path)) {
             const eachPath = Path.join(path, fileOrFolder.name)
