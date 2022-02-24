@@ -384,7 +384,7 @@ export const FileSystem = {
         for await (const fileOrFolder of Deno.readDir(path)) {
             const eachPath = Path.join(path, fileOrFolder.name)
             // default to checking the target of a symlink
-            if (!allSymlinksAreFiles) {
+            if (!options.allSymlinksAreFiles) {
                 // this one treats symbolic links as "real" paths to directories
                 if (!(await FileSystem.info(eachPath)).isDirectory) {
                     paths.push(eachPath)
