@@ -238,6 +238,7 @@ export const FileSystem = {
             }
         }
         result.isFolder = result.isDirectory
+        result.path = fileOrFolderPath
         return result
     },
     remove: (fileOrFolder) => Deno.remove(fileOrFolder,{recursive: true}).catch(()=>false),
