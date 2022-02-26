@@ -223,7 +223,11 @@ class AsyncItemInfo {
     get parentPath() {return ((async ()=>{
         return this.path && Path.dirname(this.path)
     })())}
-    get pathToTarget() {return ((async ()=>{
+    relativePathFrom(parentPath) {
+        return Path.relative(parentPath, this.path),
+    }
+    // TODO: add "finalTarget" methods
+    get pathToNextTarget() {return ((async ()=>{
         const lstat = await this.lstat
         if (lstat.isSymlink) {
             return Deno.readLink(this.path)
@@ -231,7 +235,7 @@ class AsyncItemInfo {
             return this.path
         }
     })())}
-    get target() {return ((async ()=>{
+    get nextTarget() {return ((async ()=>{
         const lstat = await this.lstat
         if (lstat.isSymlink) {
             return AsyncItemInfo({path: await Deno.readLink(this.path)})
