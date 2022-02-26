@@ -424,8 +424,8 @@ export const FileSystem = {
         }
         return new ItemInfo({path:fileOrFolderPath, _lstatData: lstat, _statData: stat})
     },
-    remove: (fileOrFolder) => Deno.remove(fileOrFolder,{recursive: true}).catch(()=>false),
-    makeRelativePath: ({from, to}) => Path.relative(from, to),
+    remove: (fileOrFolder) => Deno.remove(fileOrFolder.path || fileOrFolder,{recursive: true}).catch(()=>false),
+    makeRelativePath: ({from, to}) => Path.relative(from.path || from, to.path || to),
     makeAbsolutePath: (path)=> {
         if (!Path.isAbsolute(path)) {
             return Path.normalize(Path.join(Deno.cwd(), path))
@@ -434,6 +434,7 @@ export const FileSystem = {
         }
     },
     async finalTargetPathOf(path) {
+        path = path.path || path // if given ItemInfo object
         let result = await Deno.lstat(path).catch(()=>({doesntExist: true}))
         if (result.doesntExist) {
             return null
@@ -458,6 +459,7 @@ export const FileSystem = {
         return path
     },
     async ensureIsFolder(path) {
+        path = path.path || path // if given ItemInfo object
         const parentPath = Path.dirname(path)
         // root is always a folder
         if (parentPath == path) {
@@ -520,6 +522,9 @@ export const FileSystem = {
         return result
     },
     async relativeLink({existingItem, newItem}) {
+        existingItem = existingItem.path || existingItem
+        newItem = newItem.path || newItem // if given ItemInfo object
+
         const existingItemDoesntExist = (await Deno.lstat(existingItem).catch(()=>({doesntExist: true}))).doesntExist
         // if the item doesnt exists
         if (existingItemDoesntExist) {
@@ -532,6 +537,7 @@ export const FileSystem = {
         return Deno.symlink(pathFromNewToExisting, existingItem)
     },
     async pathPieces(path) {
+        path = path.path || path // if given ItemInfo object
         // const [ *folders, fileName, fileExtension ] = FileSystem.pathPieces(path)
         const result = Path.parse(path)
         const folderList = []
