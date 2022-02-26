@@ -156,8 +156,6 @@ export const Console = {
     },
 }
 
-
-
 class ItemInfo {
     constructor({path,_lstatData,_statData}) {
         this.path = path
@@ -175,7 +173,11 @@ class ItemInfo {
     }
     get lstat() {
         if (this._lstat) {
-            this._lstat = Deno.lstatSync(this.path).catch(()=>({doesntExist: true}))
+            try {
+                this._lstat = Deno.lstatSync(this.path)
+            } catch (error) {
+                this._lstat = {doesntExist: true}
+            }
         }
         return this._lstat
     }
@@ -217,12 +219,21 @@ class ItemInfo {
         return !lstat.doesntExist
     }
     get name() {
-        return this.path && Path.basename(this.path)
+        return Path.parse(this.path).name
+    }
+    get extension() {
+        return Path.parse(this.path).ext
+    }
+    get basename() {
+        return this.name 
     }
     get parentPath() {
         return this.path && Path.dirname(this.path)
     }
-    get pathToTarget() {
+    relativePathFrom(parentPath) {
+        return Path.relative(parentPath, this.path)
+    }
+    get pathToNextTarget() {
         const lstat = this.lstat
         if (lstat.isSymlink) {
             return Deno.readLinkSync(this.path)
@@ -230,10 +241,10 @@ class ItemInfo {
             return this.path
         }
     }
-    get target() {
+    get nextTarget() {
         const lstat = this.lstat
         if (lstat.isSymlink) {
-            return ItemInfo({path:Deno.readLinkSync(this.path)})
+            return new ItemInfo({path:Deno.readLinkSync(this.path)})
         } else {
             return this
         }
@@ -308,8 +319,27 @@ class ItemInfo {
     
     // aliases
     get isDirectory() { return this.isFolder }
-    get basename()    { return this.name }
     get dirname()     { return this.parentPath }
+
+    toJSON() {
+        return {
+            exists: this.exists,
+            name: this.name,
+            extension: this.extension,
+            basename: this.basename,
+            parentPath: this.parentPath,
+            pathToNextTarget: this.pathToNextTarget,
+            isSymlink: this.isSymlink,
+            isBrokenLink: this.isBrokenLink,
+            isLoopOfLinks: this.isLoopOfLinks,
+            isFile: this.isFile,
+            isFolder: this.isFolder,
+            sizeInBytes: this.sizeInBytes,
+            permissions: this.permissions,
+            isDirectory: this.isDirectory,
+            dirname: this.dirname,
+        }
+    }
 }
 
 const cache = {}
@@ -366,36 +396,33 @@ export const FileSystem = {
             return null
         }
     },
-    async info(fileOrFolderPath) {
-        const result = await Deno.lstat(fileOrFolderPath).catch(()=>({doesntExist: true}))
-        // add additional keys
-        Object.assign(result, {
-            exists: !result.doesntExist,
-            isBrokenLink: false,
-            isLoopOfLinks: false,
-        })
-        // follow symlinks to see what they link to
-        if (result.exists && result.isSymlink) {
+    async info(fileOrFolderPath, _cachedLstat=null) {
+        // compute lstat and stat before creating ItemInfo (so its async for performance)
+        const lstat = _cachedLstat || await Deno.lstat(fileOrFolderPath).catch(()=>({doesntExist: true}))
+        let stat = {}
+        if (!lstat.isSymlink) {
+            stat = {
+                isBrokenLink: false,
+                isLoopOfLinks: false,
+            }
+        // if symlink
+        } else {
             try {
-                const { isDirectory, isFile } = await Deno.stat(fileOrFolderPath)
-                result.isDirectory = isDirectory
-                result.isFile = isFile
+                stat = await Deno.stat(fileOrFolderPath)
             } catch (error) {
-                result.isFile = true
                 if (error.message.match(/^Too many levels of symbolic links/)) {
-                    result.isBrokenLink = true
-                    result.isLoopOfLinks = true
+                    stat.isBrokenLink = true
+                    stat.isLoopOfLinks = true
                 } else if (error.message.match(/^No such file or directory/)) {
-                    result.isBrokenLink = true
+                    stat.isBrokenLink = true
                 } else {
                     // probably a permission error
+                    // TODO: improve how this is handled
                     throw error
                 }
             }
         }
-        result.isFolder = result.isDirectory
-        result.path = fileOrFolderPath
-        return result
+        return new ItemInfo({path:fileOrFolderPath, _lstatData: lstat, _statData: stat})
     },
     remove: (fileOrFolder) => Deno.remove(fileOrFolder,{recursive: true}).catch(()=>false),
     makeRelativePath: ({from, to}) => Path.relative(from, to),
@@ -406,7 +433,7 @@ export const FileSystem = {
             return path
         }
     },
-    async finalTargetOf(path) {
+    async finalTargetPathOf(path) {
         let result = await Deno.lstat(path).catch(()=>({doesntExist: true}))
         if (result.doesntExist) {
             return null
@@ -456,8 +483,7 @@ export const FileSystem = {
         return FileSystem.ensureIsFolder(parentPath)
     },
     async walkUpUntil(fileToFind, startPath=null){
-        const cwd = Deno.cwd()
-        let here = startPath || cwd
+        let here = startPath || Deno.cwd()
         if (!Path.isAbsolute(here)) {
             here = Path.join(cwd, fileToFind)
         }
@@ -476,6 +502,7 @@ export const FileSystem = {
             }
         }
     },
+    // FIXME: make this work for folders with many options for how to handle symlinks
     async copy({from, to, force=true}) {
         const existingItemDoesntExist = (await Deno.stat(from).catch(()=>({doesntExist: true}))).doesntExist
         if (existingItemDoesntExist) {
@@ -504,21 +531,6 @@ export const FileSystem = {
         const pathFromNewToExisting = Path.relative(newItem, existingItem)
         return Deno.symlink(pathFromNewToExisting, existingItem)
     },
-    async listItemsIn(path) {
-        const paths = []
-        for await (const fileOrFolder of Deno.readDir(path)) {
-            paths.push(Path.join(path,fileOrFolder.name))
-        }
-        return paths
-    },
-    async listPaths(path, options){
-        const results = []
-        for await (const dirEntry of Deno.readDir(path)) {
-            const eachPath = Path.join(path, dirEntry.name)
-            results.push(eachPath)
-        }
-        return results
-    },
     async pathPieces(path) {
         // const [ *folders, fileName, fileExtension ] = FileSystem.pathPieces(path)
         const result = Path.parse(path)
@@ -534,53 +546,99 @@ export const FileSystem = {
         }
         return [...folderList, result.name, result.ext ]
     },
-    async listItems(path) {
-        const paths = []
-        for await (const fileOrFolder of Deno.readDir(path)) {
-            paths.push(Path.join(path,fileOrFolder.name))
+    async listPathsIn(pathOrFileInfo){
+        const info = pathOrFileInfo instanceof ItemInfo ? pathOrFileInfo : await FileSystem.info(pathOrFileInfo)
+        // if not folder (includes if it doesn't exist)
+        if (!info.isFolder) {
+            return []
         }
-        return paths
+
+        const path = info.path
+        const results = []
+        for await (const dirEntry of Deno.readDir(path)) {
+            const eachPath = Path.join(path, dirEntry.name)
+            results.push(eachPath)
+        }
+        return results
+    },
+    async listBasenamesIn(pathOrFileInfo){
+        const info = pathOrFileInfo instanceof ItemInfo ? pathOrFileInfo : await FileSystem.info(pathOrFileInfo)
+        // if not folder (includes if it doesn't exist)
+        if (!info.isFolder) {
+            return []
+        }
+
+        const path = info.path
+        const results = []
+        for await (const dirEntry of Deno.readDir(path)) {
+            results.push(dirEntry.name)
+        }
+        return results
+    },
+    // TODO: make iteratePathsIn() that returns an async generator
+    //       and make all these listing methods way more efficient in the future
+    async listItemsIn(pathOrFileInfo) {
+        const info = pathOrFileInfo instanceof ItemInfo ? pathOrFileInfo : await FileSystem.info(pathOrFileInfo)
+        // if not folder (includes if it doesn't exist)
+        if (!info.isFolder) {
+            return []
+        }
+
+        const path = info.path
+        const outputPromises = []
+        // schedule all the info lookup
+        for await (const fileOrFolder of Deno.readDir(path)) {
+            const eachPath = Path.join(path,fileOrFolder.name)
+            outputPromises.push(FileSystem.info(eachPath))
+        }
+        
+        // then wait on all of them
+        const output = []
+        for (const each of outputPromises) {
+            output.push(await each)
+        }
+        return output
     },
     // includes symlinks to files and pipes
-    async listFiles(path, options={allSymlinksAreFiles:false}) {
-        options = {allSymlinksAreFiles:false, ...options} 
-        const paths = []
-        for await (const fileOrFolder of Deno.readDir(path)) {
-            const eachPath = Path.join(path, fileOrFolder.name)
-            // default to checking the target of a symlink
-            if (!options.allSymlinksAreFiles) {
-                // this one treats symbolic links as "real" paths to directories
-                if (!(await FileSystem.info(eachPath)).isDirectory) {
-                    paths.push(eachPath)
-                }
-            } else {
-                // treat all symbolic links as files
-                if (!fileOrFolder.isDirectory) {
-                    paths.push(eachPath)
-                }
-            }
+    async listFileItemsIn(pathOrFileInfo, options={treatAllSymlinksAsFiles:false}) {
+        const { treatAllSymlinksAsFiles } = {treatAllSymlinksAsFiles:false, ...options}
+        const items = await FileSystem.listItemsIn(pathOrFileInfo)
+        if (treatAllSymlinksAsFiles) {
+            return items.filter(eachItem=>(eachItem.isFile || (treatAllSymlinksAsFiles && eachItem.isSymlink)))
+        } else {
+            return items.filter(eachItem=>eachItem.isFile)
         }
-        return paths
     },
-    async listFolders(path, {ignoreSymlinks=false}) {
-        const paths = []
-        for await (const fileOrFolder of Deno.readDir(path)) {
-            const eachPath = Path.join(path, fileOrFolder.name)
-            // default to checking the target of a symlink
-            if (!ignoreSymlinks) {
-                if ((await FileSystem.info(eachPath)).isDirectory) {
-                    paths.push(eachPath)
-                }
-            } else {
-                // ignores all symbolic links
-                if (fileOrFolder.isDirectory) {
-                    paths.push(eachPath)
-                }
-            }
+    async listFilePathsIn(pathOrFileInfo, options={treatAllSymlinksAsFiles:false}) {
+        return (await FileSystem.listItemsIn(pathOrFileInfo, options)).map(each=>each.path)
+    },
+    async listFileBasenamesIn(pathOrFileInfo, options={treatAllSymlinksAsFiles:false}) {
+        return (await FileSystem.listItemsIn(pathOrFileInfo, options)).map(each=>each.basename)
+    },
+    
+    async listFolderItemsIn(pathOrFileInfo, options={ignoreSymlinks:false}) {
+        const { ignoreSymlinks } = {ignoreSymlinks:false, ...options}
+        const items = await FileSystem.listItemsIn(pathOrFileInfo)
+        if (ignoreSymlinks) {
+            return items.filter(eachItem=>(eachItem.isFolder && !eachItem.isSymlink))
+        } else {
+            return items.filter(eachItem=>eachItem.isFolder)
         }
-        return paths
     },
-    async recursivelyList(path, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
+    async listFolderPathsIn(pathOrFileInfo, options={ignoreSymlinks:false}) {
+        return (await FileSystem.listItemsIn(pathOrFileInfo, options)).map(each=>each.path)
+    },
+    async listFolderBasenamesIn(pathOrFileInfo, options={ignoreSymlinks:false}) {
+        return (await FileSystem.listItemsIn(pathOrFileInfo, options)).map(each=>each.basename)
+    },
+    async recursivelyListPaths(pathOrFileInfo, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
+        const info = pathOrFileInfo instanceof ItemInfo ? pathOrFileInfo : await FileSystem.info(pathOrFileInfo)
+        // if not folder (includes if it doesn't exist)
+        if (!info.isFolder) {
+            return []
+        }
+
+        const path = info.path
         if (!options.alreadySeached) {
             options.alreadySeached = new Set()
         }
@@ -597,7 +655,7 @@ export const FileSystem = {
             if (dirEntry.isFile) {
                 results.push(eachPath)
             } else if (dirEntry.isDirectory) {
-                for (const each of await FileSystem.recursivelyList(eachPath, {...options, alreadySeached})) {
+                for (const each of await FileSystem.recursivelyListPaths(eachPath, {...options, alreadySeached})) {
                     results.push(each)
                 }
             } else if (!options.onlyHardlinks && dirEntry.isSymlink) {
@@ -606,7 +664,7 @@ export const FileSystem = {
                 } else {
                     const pathInfo = await FileSystem.info(eachPath)
                     if (pathInfo.isDirectory) {
-                        for (const each of await FileSystem.recursivelyList(eachPath, {...options, alreadySeached})) {
+                        for (const each of await FileSystem.recursivelyListPaths(eachPath, {...options, alreadySeached})) {
                             results.push(each)
                         }
                     } else {
@@ -616,6 +674,15 @@ export const FileSystem = {
             }
         }
         return results
+    },
+    async recursivelyListItems(pathOrFileInfo, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
+        const paths = await FileSystem.recursivelyListPaths(pathOrFileInfo, options)
+        const promises = paths.map(each=>FileSystem.info(each))
+        const output = []
+        for (const each of promises) {
+            output.push(await each)
+        }
+        return output
     },
     async getPermissions({path}) {
         const {mode} = await Deno.lstat(path)
@@ -703,7 +770,7 @@ export const FileSystem = {
             return Deno.chmod(path, permissionNumber)
         } else {
             const promises = []
-            const paths = await FileSystem.recursivelyList(path, {onlyHardlinks: false, dontFollowSymlinks: false, ...recursively})
+            const paths = await FileSystem.recursivelyListPaths(path, {onlyHardlinks: false, dontFollowSymlinks: false, ...recursively})
             // schedule all of them asyncly
             for (const eachPath of paths) {
                 promises.push(
