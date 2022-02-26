@@ -631,7 +631,7 @@ export const FileSystem = {
     async listFolderBasenamesIn(pathOrFileInfo, options={ignoreSymlinks:false}) {
         return (await FileSystem.listItemsIn(pathOrFileInfo, options)).map(each=>each.basename)
     },
-    async recursivelyListPaths(pathOrFileInfo, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
+    async recursivelyListPathsIn(pathOrFileInfo, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
         const info = pathOrFileInfo instanceof ItemInfo ? pathOrFileInfo : await FileSystem.info(pathOrFileInfo)
         // if not folder (includes if it doesn't exist)
         if (!info.isFolder) {
@@ -655,7 +655,7 @@ export const FileSystem = {
             if (dirEntry.isFile) {
                 results.push(eachPath)
             } else if (dirEntry.isDirectory) {
-                for (const each of await FileSystem.recursivelyListPaths(eachPath, {...options, alreadySeached})) {
+                for (const each of await FileSystem.recursivelyListPathsIn(eachPath, {...options, alreadySeached})) {
                     results.push(each)
                 }
             } else if (!options.onlyHardlinks && dirEntry.isSymlink) {
@@ -664,7 +664,7 @@ export const FileSystem = {
                 } else {
                     const pathInfo = await FileSystem.info(eachPath)
                     if (pathInfo.isDirectory) {
-                        for (const each of await FileSystem.recursivelyListPaths(eachPath, {...options, alreadySeached})) {
+                        for (const each of await FileSystem.recursivelyListPathsIn(eachPath, {...options, alreadySeached})) {
                             results.push(each)
                         }
                     } else {
@@ -675,8 +675,8 @@ export const FileSystem = {
         }
         return results
     },
-    async recursivelyListItems(pathOrFileInfo, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
-        const paths = await FileSystem.recursivelyListPaths(pathOrFileInfo, options)
+    async recursivelyListItemsIn(pathOrFileInfo, options={onlyHardlinks: false, dontFollowSymlinks: false}) {
+        const paths = await FileSystem.recursivelyListPathsIn(pathOrFileInfo, options)
         const promises = paths.map(each=>FileSystem.info(each))
         const output = []
         for (const each of promises) {
@@ -770,7 +770,7 @@ export const FileSystem = {
             return Deno.chmod(path, permissionNumber)
         } else {
             const promises = []
-            const paths = await FileSystem.recursivelyListPaths(path, {onlyHardlinks: false, dontFollowSymlinks: false, ...recursively})
+            const paths = await FileSystem.recursivelyListPathsIn(path, {onlyHardlinks: false, dontFollowSymlinks: false, ...recursively})
             // schedule all of them asyncly
             for (const eachPath of paths) {
                 promises.push(
