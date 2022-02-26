@@ -23,6 +23,191 @@ const ansiRegexPattern = new RegExp(
     'g'
 )
 
+class AsyncItemInfo {
+    constructor({path,lstatData=null,statData=null}) {
+        this.path = path
+        // expects doesntExist, path,
+        this._lstat = lstatData
+        this._data = statData
+    }
+
+    // 
+    // core data sources
+    // 
+    refresh() {
+        this._lstat = null
+        this._data = null
+    }
+    get lstat() {return ((async ()=>{
+
+        if (!this._lstat) {
+            this._lstat = await Deno.lstat(this.path).catch(()=>({doesntExist: true}))
+        }
+        return this._lstat
+
+    })())}
+    get stat() {return ((async ()=>{
+        // compute if not cached
+        if (!this._stat) {
+            const lstat = this.lstat
+            if (!lstat.isSymlink) {
+                this._stat = {
+                    isBrokenLink: false,
+                    isLoopOfLinks: false,
+                }
+            // if symlink
+            } else {
+                try {
+                    this._stat = await Deno.stat(this.path)
+                } catch (error) {
+                    if (error.message.match(/^Too many levels of symbolic links/)) {
+                        this._stat.isBrokenLink = true
+                        this._stat.isLoopOfLinks = true
+                    } else if (error.message.match(/^No such file or directory/)) {
+                        this._stat.isBrokenLink = true
+                    } else {
+                        // probably a permission error
+                        // TODO: improve how this is handled
+                        throw error
+                    }
+                }
+            }
+        }
+        return this._stat
+    })())}
+
+    // 
+    // main attributes
+    // 
+    get exists() {return ((async ()=>{
+        const lstat = await this.lstat
+        return !lstat.doesntExist
+    })())}
+    get name() {return ((async ()=>{
+        return this.path && Path.basename(this.path)
+    })())}
+    get parentPath() {return ((async ()=>{
+        return this.path && Path.dirname(this.path)
+    })())}
+    get pathToTarget() {return ((async ()=>{
+        const lstat = await this.lstat
+        if (lstat.isSymlink) {
+            return Deno.readLink(this.path)
+        } else {
+            return this.path
+        }
+    })())}
+    get target() {return ((async ()=>{
+        const lstat = await this.lstat
+        if (lstat.isSymlink) {
+            return AsyncItemInfo({path:Deno.readLink(this.path)})
+        } else {
+            return this
+        }
+    })())}
+    get isSymlink() {return ((async ()=>{
+        const lstat = await this.lstat
+        return !!lstat.isSymlink
+    })())}
+    get isBrokenLink() {return ((async ()=>{
+        const stat = await this.stat
+        return !!stat.isBrokenLink
+    })())}
+    get isLoopOfLinks() {return ((async ()=>{
+        const stat = await this.stat
+        return !!stat.isLoopOfLinks
+    })())}
+    get isFile() {return ((async ()=>{
+        const lstat = await this.lstat
+        // if doesnt exist then its not a file!
+        if (lstat.doesntExist) {
+            return false
+        }
+        // if hardlink
+        if (!lstat.isSymlink) {
+            return lstat.isFile
+        }
+        
+        // if symlink
+        const stat = await this.stat
+        return !!stat.isFile
+    })())}
+    get isFolder() {return ((async ()=>{
+        const lstat = await this.lstat
+        // if doesnt exist then its not a folder!
+        if (lstat.doesntExist) {
+            return false
+        }
+        // if hardlink
+        if (!lstat.isSymlink) {
+            return lstat.isDirectory
+        }
+        
+        // if symlink
+        const stat = await this.stat
+        return !!stat.isDirectory
+    })())}
+    get sizeInBytes() {return ((async ()=>{
+        const lstat = await this.lstat
+        return lstat.size
+    })())}
+    get permissions() {return ((async ()=>{
+        const {mode} = await this.lstat
+        // see: https://stackoverflow.com/questions/15055634/understanding-and-decoding-the-file-mode-value-from-stat-function-output#15059931
+        return {
+            owner: {        //          rwxrwxrwx
+                canRead:    !!(0b0000000100000000 & mode),
+                canWrite:   !!(0b0000000010000000 & mode),
+                canExecute: !!(0b0000000001000000 & mode),
+            },
+            group: {
+                canRead:    !!(0b0000000000100000 & mode),
+                canWrite:   !!(0b0000000000010000 & mode),
+                canExecute: !!(0b0000000000001000 & mode),
+            },
+            others: {
+                canRead:    !!(0b0000000000000100 & mode),
+                canWrite:   !!(0b0000000000000010 & mode),
+                canExecute: !!(0b0000000000000001 & mode),
+            },
+        }
+    })())}
+    
+    // aliases
+    get isDirectory() { return this.isFolder }
+    get basename()    { return this.name }
+    get dirname()     { return this.parentPath }
+}
+
+const result = await Deno.lstat(fileOrFolderPath).catch(()=>({doesntExist: true}))
+        // add additional keys
+        Object.assign(result, {
+            exists: !result.doesntExist,
+            isBrokenLink: false,
+            isLoopOfLinks: false,
+        })
+        // follow symlinks to see what they link to
+        if (result.exists && result.isSymlink) {
+            try {
+                const { isDirectory, isFile } = await Deno.stat(fileOrFolderPath)
+                result.isDirectory = isDirectory
+                result.isFile = isFile
+            } catch (error) {
+                result.isFile = true
+                if (error.message.match(/^Too many levels of symbolic links/)) {
+                    result.isBrokenLink = true
+                    result.isLoopOfLinks = true
+                } else if (error.message.match(/^No such file or directory/)) {
+                    result.isBrokenLink = true
+                } else {
+                    // probably a permission error
+                    throw error
+                }
+            }
+        }
+        result.isFolder = result.isDirectory
+        result.path = fileOrFolderPath
+
 export const Console = {
     ...console,
     ...vibrance,
@@ -348,6 +533,13 @@ export const FileSystem = {
         const pathFromNewToExisting = Path.relative(newItem, existingItem)
         return Deno.symlink(pathFromNewToExisting, existingItem)
     },
+    async listItemsIn(path) {
+        const paths = []
+        for await (const fileOrFolder of Deno.readDir(path)) {
+            paths.push(Path.join(path,fileOrFolder.name))
+        }
+        return paths
+    },
     async listPaths(path, options){
         const results = []
         for await (const dirEntry of Deno.readDir(path)) {
@@ -356,7 +548,7 @@ export const FileSystem = {
         }
         return results
     },
-    pathPieces: (path)=>{
+    async pathPieces(path) {
         // const [ *folders, fileName, fileExtension ] = FileSystem.pathPieces(path)
         const result = Path.parse(path)
         const folderList = []
