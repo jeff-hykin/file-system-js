@@ -5,13 +5,11 @@ const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.33')).
 const run = await import(`https://deno.land/x/sprinter@0.2.2/index.js`)
 
 // TODO:
-    // add dirname getter to .info()
-    // add basename getter to .info()
     // export an OS object
     // grab stuff from fs module: import { expandGlob } from "https://deno.land/std@0.126.0/fs/mod.ts";
         // LF vs CRLF detection
-    // add move command
 // BIG:
+    // add move command
     // add copy command (figure out how to handle symlinks)
 
 
@@ -26,6 +24,14 @@ const ansiRegexPattern = new RegExp(
 export const Console = {
     ...console,
     ...vibrance,
+    get osInfo() {
+        return {
+            kernel: {
+                commonName: Deno.build.os,
+            }
+        }
+    },
+   
     get thisExecutable() {
         return Deno.execPath()
     },
@@ -41,7 +47,7 @@ export const Console = {
         yesNo(question) {
             while (true) {
                 let answer = prompt(question)
-                const match = answer.match(/^ *(y|yes|n|no) *\n?$/i)
+                const match = `${answer}`.match(/^ *(y|yes|n|no) *\n?$/i)
                 if (match) {
                     // if yes
                     if (match[1][0] == 'y' || match[1][0] == 'Y') {
