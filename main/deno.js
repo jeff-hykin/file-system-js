@@ -231,7 +231,7 @@ class ItemInfo {
         return Path.parse(this.path).ext
     }
     get basename() {
-        return this.name 
+        return this.path && Path.basename(this.path)
     }
     get parentPath() {
         return this.path && Path.dirname(this.path)
