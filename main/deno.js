@@ -394,6 +394,9 @@ export const FileSystem = {
             return Deno.cwd()
         }
     },
+    dirname: Path.dirname,
+    basename: Path.basename,
+    extname: Path.extname,
     join: Path.join,
     async read(path) {
         try {
