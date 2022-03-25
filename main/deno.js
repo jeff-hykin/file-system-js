@@ -1,13 +1,25 @@
 
-const Path = await import("https://deno.land/std@0.117.0/path/mod.ts")
+const Path = await import("https://deno.land/std@0.128.0/path/mod.ts")
 const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.ts")
-const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.33')).default
-const run = await import(`https://deno.land/x/sprinter@0.2.2/index.js`)
+const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.35')).default
+const run = await import(`https://deno.land/x/sprinter@0.4.2/index.js`)
 
 // TODO:
     // export an OS object
     // grab stuff from fs module: import { expandGlob } from "https://deno.land/std@0.126.0/fs/mod.ts";
         // LF vs CRLF detection
+    // think of API for these
+        // get osInfo() {
+        //     return {
+        //         kernel: {
+        //             commonName: Deno.build.os,
+        //         }
+        //     }
+        // },
+    
+        // get thisExecutable() {
+        //     return Deno.execPath()
+        // },
 // BIG:
     // add move command
     // add copy command (figure out how to handle symlinks)
@@ -24,17 +36,6 @@ const ansiRegexPattern = new RegExp(
 export const Console = {
     ...console,
     ...vibrance,
-    get osInfo() {
-        return {
-            kernel: {
-                commonName: Deno.build.os,
-            }
-        }
-    },
-   
-    get thisExecutable() {
-        return Deno.execPath()
-    },
     run,
     askFor: {
         line(question) {
