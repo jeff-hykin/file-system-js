@@ -34,7 +34,7 @@ const ansiRegexPattern = new RegExp(
     'g'
 )
 
-const OS = {
+export const OS = {
     commonChecks: {
         isMac: Deno.build.os=="darwin",
         isWindows: Deno.build.os=="windows",
@@ -415,9 +415,16 @@ export const FileSystem = {
     get home() {
         return OS.home
     },
-    getCwd() {
+    get currentFolder() {
         return Deno.cwd()
     },
+    set currentFolder(value) {
+        Deno.chdir(value)
+    },
+    get cwd() { return FileSystem.currentFolder },
+    set cwd(value) { return FileSystem.currentFolder = value },
+    get pwd() { return FileSystem.cwd },
+    set pwd(value) { return FileSystem.cwd = value },
     __filename__() {
         const err = new Error()
         // element 0 is "Error", element 1 is the path to this file, element 2 should be the path to the caller
@@ -816,8 +823,8 @@ export const FileSystem = {
         // 
         // set bits for the corrisponding permissions
         // 
-        if (permissions.owner.canRead    ) { permissionNumber = permissionNumber | 0b1000000000 }
-        if (permissions.owner.canWrite   ) { permissionNumber = permissionNumber | 0b0100000000 }
+        if (permissions.owner.canRead    ) { permissionNumber = permissionNumber | 0b0100000000 }
+        if (permissions.owner.canWrite   ) { permissionNumber = permissionNumber | 0b0010000000 }
         if (permissions.owner.canExecute ) { permissionNumber = permissionNumber | 0b0001000000 }
         if (permissions.group.canRead    ) { permissionNumber = permissionNumber | 0b0000100000 }
         if (permissions.group.canWrite   ) { permissionNumber = permissionNumber | 0b0000010000 }
