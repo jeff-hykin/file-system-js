@@ -71,7 +71,7 @@ export const OS = {
         }
         return cache.home
     },
-    async getOwnerOf(path) {
+    async _getOwnerOf(path) {
         if (Deno.build.os === "darwin") {
             if (!cache.macOsUserToUid) {
                 const userListString = await run("dscl",".", "-list", "/Users", "UniqueID", run.Stdout(run.returnAsString))
