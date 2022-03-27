@@ -1,6 +1,6 @@
 
 const Path = await import("https://deno.land/std@0.128.0/path/mod.ts")
-const run = await import(`https://deno.land/x/sprinter@0.4.2/index.js`)
+const { run } = await import(`https://deno.land/x/sprinter@0.4.2/index.js`)
 const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.ts")
 const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.35')).default
 // const { FileSystem, Console } = await import(`https://deno.land/x/file_system_js@0.4.1/main/deno.js`)
@@ -25,7 +25,7 @@ const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.35')).
     // add move command
     // add copy command (figure out how to handle symlinks)
 
-
+const cache = {}
 const ansiRegexPattern = new RegExp(
     [
         '[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)',
@@ -34,10 +34,71 @@ const ansiRegexPattern = new RegExp(
     'g'
 )
 
+const OS = {
+    commonChecks: {
+        isMac: Deno.build.os=="darwin",
+        isWindows: Deno.build.os=="windows",
+        isLinux: Deno.build.os=="linux",
+    },
+    commonName: ({
+        "darwin": "MacOS",
+        "windows": "Windows",
+        "linux": "Linux",
+    })[Deno.build.os],
+    kernel: {
+        commonName: Deno.build.os
+    },
+    architecture: Deno.build.architecture,
+    get username() {
+        if (!cache.username) {
+            if (!OS.commonChecks.isWindows) {
+                cache.username = Deno.env.get("USER")
+            } else {
+                // untested
+                cache.username = Deno.env.get("USERNAME")
+            }
+        }
+        return cache.username
+    },
+    get home() {
+        if (!cache.home) {
+            if (!OS.commonChecks.isWindows) {
+                cache.home = Deno.env.get("HOME")
+            } else {
+                // untested
+                cache.home = Deno.env.get("HOMEPATH")
+            }
+        }
+        return cache.home
+    },
+    async getOwnerOf(path) {
+        if (Deno.build.os === "darwin") {
+            if (!cache.macOsUserToUid) {
+                const userListString = await run("dscl",".", "-list", "/Users", "UniqueID", run.Stdout(run.returnAsString))
+                const userList = userListString.split(/\n/)
+                const userNamesAndIds = userList.map(each=>{
+                    const match = each.match(/(.+?)(-?\d+)$/,"$1")
+                    if (match) {
+                        const username = match[1].trim()
+                        const uid = match[2]
+                        return [username, uid]
+                    }
+                }).filter(each=>each)
+                const idsAndUsernames = userNamesAndIds.map(([username, id])=>[id, username])
+                cache.macOsUserToUid = Object.fromEntries(userNamesAndIds)
+                cache.macOsUidToUser = Object.fromEntries(idsAndUsernames)
+            }
+        } else {
+            throw Error(`Unsupported system`)
+            // for linux look at:
+            // getent passwd {1000..6000}
+        }
+    }
+}
+
 export const Console = {
     ...console,
     ...vibrance,
-    run,
     askFor: {
         line(question) {
             return prompt(question)
@@ -350,20 +411,9 @@ class ItemInfo {
     }
 }
 
-const cache = {}
 export const FileSystem = {
     get home() {
-        if (!cache.home) {
-            if (Deno.build.os == "linux" || Deno.build.os == "darwin") {
-                cache.home = Deno.env.get("HOME")
-            } else if (Deno.build.os == "windows") {
-                // untested
-                cache.home = Deno.env.get("HOMEPATH")
-            } else {
-                return null
-            }
-        }
-        return cache.home
+        return OS.home
     },
     getCwd() {
         return Deno.cwd()
