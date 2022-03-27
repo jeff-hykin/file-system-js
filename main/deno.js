@@ -3,7 +3,7 @@ const Path = await import("https://deno.land/std@0.128.0/path/mod.ts")
 const { run } = await import(`https://deno.land/x/sprinter@0.4.2/index.js`)
 const { copy } = await import("https://deno.land/std@0.123.0/streams/conversion.ts")
 const { vibrance } = (await import('https://cdn.skypack.dev/vibrance@v0.1.35')).default
-// const { FileSystem, Console } = await import(`https://deno.land/x/file_system_js@0.4.1/main/deno.js`)
+// const { FileSystem, Console } = await import(`https://deno.land/x/file_system_js@0.5.1/main/deno.js`)
 
 // TODO:
     // export an OS object
